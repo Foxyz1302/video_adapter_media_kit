@@ -1,0 +1,20 @@
+name: video_adapter_media_kit
+description: "VideoPlayerAdapter over media_kit (libmpv). Shared by media_kit consumers (kemono_browser_project)."
+version: 0.0.1
+publish_to: 'none'
+
+environment:
+  sdk: ^3.13.0-282.1.beta
+
+dependencies:
+  flutter:
+    sdk: flutter
+  leaf_widgets:
+    path: ../leaf_widgets
+  media_kit: ^1.2.6
+  media_kit_video: ^2.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

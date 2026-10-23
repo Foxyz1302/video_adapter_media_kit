@@ -27,14 +27,25 @@ class MediaKitAdapter extends VideoPlayerAdapter implements HasVolume {
   /// [initialVolume] is applied on [load] (media_kit range is 0–100, not 0–1).
   /// [onVolumeChanged] reports user/system volume changes for persistence.
   /// [loop] selects single-item repeat; pass false for play-once.
-  MediaKitAdapter({this.initialVolume, this.onVolumeChanged, this.loop = true}) {
-    _player = Player();
-    _videoController = VideoController(_player);
+  /// [playerConfiguration] and [videoControllerConfiguration] reach the
+  /// [Player] and [VideoController] as-is; [mpvProperties] are set on mpv
+  /// right before the media opens, for options mpv reads at open time.
+  MediaKitAdapter({
+    this.initialVolume,
+    this.onVolumeChanged,
+    this.loop = true,
+    PlayerConfiguration playerConfiguration = const PlayerConfiguration(),
+    VideoControllerConfiguration videoControllerConfiguration = const VideoControllerConfiguration(),
+    this.mpvProperties = const {},
+  }) {
+    _player = Player(configuration: playerConfiguration);
+    _videoController = VideoController(_player, configuration: videoControllerConfiguration);
   }
 
   final double? initialVolume;
   final ValueChanged<double>? onVolumeChanged;
   final bool loop;
+  final Map<String, String> mpvProperties;
 
   late final Player _player;
   late final VideoController _videoController;
@@ -42,6 +53,12 @@ class MediaKitAdapter extends VideoPlayerAdapter implements HasVolume {
   final _readyCtrl = StreamController<void>.broadcast();
   bool _readyFired = false;
   bool _disposed = false;
+
+  /// The underlying player, e.g. for mpv properties (`player.platform` is a
+  /// [NativePlayer] on native platforms).
+  Player get player => _player;
+
+  VideoController get videoController => _videoController;
 
   @override
   Widget get surface => Video(
@@ -73,6 +90,13 @@ class MediaKitAdapter extends VideoPlayerAdapter implements HasVolume {
         _readyCtrl.add(null);
       }
     });
+    final platform = _player.platform;
+    if (platform is NativePlayer) {
+      for (final property in mpvProperties.entries) {
+        if (_disposed) return;
+        await platform.setProperty(property.key, property.value);
+      }
+    }
     if (_disposed) return;
     await _player.open(playableForUrl(url, headers), play: false);
   }

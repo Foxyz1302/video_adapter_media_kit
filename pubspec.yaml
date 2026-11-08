@@ -10,7 +10,9 @@ dependencies:
   flutter:
     sdk: flutter
   leaf_widgets:
-    path: ../leaf_widgets
+    git:
+      url: https://github.com/Foxyz1302/leaf_widgets.git
+      ref: master
   media_kit: ^1.2.6
   media_kit_video: ^2.0.1
 

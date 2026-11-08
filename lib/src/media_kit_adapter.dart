@@ -12,6 +12,19 @@ Media playableForUrl(String url, Map<String, String>? headers) {
   return Media(url, httpHeaders: headers);
 }
 
+/// Whether [log] means the media failed to load, given the player's
+/// [duration] when it arrived.
+///
+/// `Player.stream.error` also carries mpv errors a playing file recovers
+/// from (decoder, audio, network retries), so it is no failure signal. A
+/// file failed only when mpv could not open or recognize it: an error from
+/// `cplayer`, `stream`, `file` or `demux` before any duration is known.
+bool mpvLoadFailed(PlayerLog log, Duration duration) {
+  if (duration > Duration.zero) return false;
+  if (log.level != 'error' && log.level != 'fatal') return false;
+  return const {'cplayer', 'stream', 'file', 'demux'}.contains(log.prefix);
+}
+
 /// [VideoPlayerAdapter] over media_kit (libmpv).
 ///
 /// The [Player] and [VideoController] are created in the constructor so
@@ -50,8 +63,11 @@ class MediaKitAdapter extends VideoPlayerAdapter implements HasVolume {
   late final Player _player;
   late final VideoController _videoController;
   StreamSubscription<double>? _volumeSub;
+  StreamSubscription<PlayerLog>? _logSub;
   final _readyCtrl = StreamController<void>.broadcast();
+  final _errorCtrl = StreamController<Object>.broadcast();
   bool _readyFired = false;
+  bool _loadFailed = false;
   bool _disposed = false;
 
   /// The underlying player, e.g. for mpv properties (`player.platform` is a
@@ -84,6 +100,12 @@ class MediaKitAdapter extends VideoPlayerAdapter implements HasVolume {
     if (reportVolume != null) {
       _volumeSub = _player.stream.volume.listen(reportVolume);
     }
+    _loadFailed = false;
+    _logSub ??= _player.stream.log.listen((log) {
+      if (_loadFailed || _disposed || !mpvLoadFailed(log, _player.state.duration)) return;
+      _loadFailed = true;
+      _errorCtrl.add(log.text);
+    });
     _player.stream.position.where((position) => position > Duration.zero).take(1).listen((_) {
       if (!_readyFired && !_disposed) {
         _readyFired = true;
@@ -110,7 +132,7 @@ class MediaKitAdapter extends VideoPlayerAdapter implements HasVolume {
   @override
   Stream<void> get readyStream => _readyCtrl.stream;
   @override
-  Stream<Object> get errorStream => _player.stream.error;
+  Stream<Object> get errorStream => _errorCtrl.stream;
 
   @override
   Duration get position => _player.state.position;
@@ -163,7 +185,9 @@ class MediaKitAdapter extends VideoPlayerAdapter implements HasVolume {
   void dispose() {
     _disposed = true;
     _volumeSub?.cancel();
+    _logSub?.cancel();
     _readyCtrl.close();
+    _errorCtrl.close();
     unawaited(_player.dispose());
   }
 }
